@@ -80,26 +80,30 @@ class Grid(object):
         return self.grid[row][col]
 
     def __str__(self):
-        output = "+" + "----+" * self.columns + "\n"
+        output = ["+" + "----+" * self.columns + "\n"]
         for row in self.each_row():
-            top = "|"
-            bottom = "+"
+            top = ["|"]
+            bottom = ["+"]
             for cell in row:
                 body = f" {self._contents_of(cell)} "
                 if cell.is_linked(cell.east):
                     east_boundary = " "
                 else:
                     east_boundary = "|"
-                top = top + body + east_boundary
+                top.append(body)
+                top.append(east_boundary)
                 if cell.is_linked(cell.south):
                     south_boundary = "    "
                 else:
                     south_boundary = "----"
                 corner = "+"
-                bottom += south_boundary + corner
-            output += top + "\n"
-            output += bottom + "\n"
-        return output
+                bottom.append(south_boundary)
+                bottom.append(corner)
+            top.append("\n")
+            bottom.append("\n")
+            output.append("".join(top))
+            output.append("".join(bottom))
+        return "".join(output)
 
     def each_row(self):
         for row in self.grid:
