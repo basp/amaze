@@ -113,6 +113,9 @@ class Grid(object):
     def size(self):
         return self.rows * self.columns
 
+    def root_distances(self):
+        return self[0, 0].distances()
+
     def to_image(self, **kwargs):
         cell_size = kwargs.get("cell_size", 10)
         modes = kwargs.get("modes", ["backgrounds", "walls"])
@@ -164,21 +167,23 @@ class Grid(object):
 
 
 class DistanceGrid(Grid):
-    def __init__(self, wrappee, distances):
+    def __init__(self, wrappee, distances=None):
+        distances = distances or wrappee.root_distances()
         self.rows = wrappee.rows
         self.columns = wrappee.columns
         self.grid = wrappee.grid
-        self.distances = wrappee[0, 0].distances()
+        self.distances = distances
 
     def _contents_of(self, cell):
         if self.distances and cell in self.distances:
             return f"{self.distances[cell]:02x}"
         else:
-            return super()._contents_of(self, cell)
+            return super()._contents_of(cell)
 
 
 class ColoredGrid(Grid):
-    def __init__(self, wrappee, distances):
+    def __init__(self, wrappee, distances=None):
+        distances = distances or wrappee.root_distances()
         self.rows = wrappee.rows
         self.columns = wrappee.columns
         self.grid = wrappee.grid
@@ -276,10 +281,22 @@ def sidewinder(grid):
     return grid
 
 
+def aldous_broder(grid):
+    cell = grid.random_cell()
+    unvisited = grid.size() - 1
+    while unvisited > 0:
+        neighbor = sample(cell.neighbors())
+        if not neighbor.links:
+            cell.link(neighbor)
+            unvisited -= 1
+        cell = neighbor
+    return grid
+
+
 if __name__ == "__main__":
     grid = Grid(16, 16)
     binary_tree(grid)
     distances = grid[8, 8].distances()
-    grid = ColoredGrid(grid, distances)
+    grid = DistanceGrid(grid, distances)
     img = grid.to_image(cell_size=10)
     img.save("test.png")
