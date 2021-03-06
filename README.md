@@ -1,0 +1,2 @@
+# amaze
+Mazes for Python
