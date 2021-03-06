@@ -59,13 +59,17 @@ class Cell(object):
 
 
 class Grid(object):
-    __slots__ = ["rows", "columns", "grid"]
+    __slots__ = ["rows", "columns", "grid", "root"]
 
-    def __init__(self, rows, columns):
+    def __init__(self, rows, columns, rootproc=None):
         self.rows = rows
         self.columns = columns
         self.grid = self._prepare_grid()
         self._configure_cells()
+        if rootproc:
+            self.root = rootproc(self.grid)
+        else:
+            self.root = self[0,0]
 
     def __getitem__(self, key):
         row, col = key
@@ -114,7 +118,7 @@ class Grid(object):
         return self.rows * self.columns
 
     def root_distances(self):
-        return self[0, 0].distances()
+        return self.root.distances()
 
     def to_image(self, **kwargs):
         cell_size = kwargs.get("cell_size", 10)
