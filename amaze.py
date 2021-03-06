@@ -67,9 +67,9 @@ class Grid(object):
         self.grid = self._prepare_grid()
         self._configure_cells()
         if rootproc:
-            self.root = rootproc(self.grid)
+            self.root = rootproc(self)
         else:
-            self.root = self[0,0]
+            self.root = self[0, 0]
 
     def __getitem__(self, key):
         row, col = key
@@ -180,6 +180,7 @@ class DistanceGrid(Grid):
         self.rows = wrappee.rows
         self.columns = wrappee.columns
         self.grid = wrappee.grid
+        self.root = wrappee.root
         self.distances = distances
 
     def _contents_of(self, cell):
@@ -196,6 +197,7 @@ class ColoredGrid(Grid):
         self.columns = wrappee.columns
         self.grid = wrappee.grid
         self.distances = distances
+        self.root = wrappee.root
         _, self.maximum = distances.max()
 
     def _background_color_for(self, cell):
