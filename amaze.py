@@ -1,4 +1,5 @@
 import random
+from typing import ForwardRef
 
 from PIL import Image, ImageDraw
 
@@ -44,6 +45,11 @@ class Cell(object):
         return list(filter(lambda x: not x is None, xs))
 
     def distances(self):
+        """Constructs a new `Distances` dictionary using `self`.
+
+        Creates dictionary that contains all the distances in
+        the grid as calculated with refernce to self.
+        """
         d = Distances(self)
         frontier = [self]
         while frontier:
@@ -86,13 +92,13 @@ class Grid(object):
             bottom = ["+"]
             for cell in row:
                 body = f" {self._contents_of(cell)} "
-                if cell.is_linked(cell.east):
+                if cell and cell.is_linked(cell.east):
                     east_boundary = " "
                 else:
                     east_boundary = "|"
                 top.append(body)
                 top.append(east_boundary)
-                if cell.is_linked(cell.south):
+                if cell and cell.is_linked(cell.south):
                     south_boundary = "    "
                 else:
                     south_boundary = "----"
@@ -124,7 +130,10 @@ class Grid(object):
     def root_distances(self):
         return self.root.distances()
 
-    def to_image(self, **kwargs):
+    def deadends(self):
+        return filter(lambda x: len(x.links) == 1, self.each_cell())
+
+    def render(self, **kwargs):
         cell_size = kwargs.get("cell_size", 10)
         modes = kwargs.get("modes", ["backgrounds", "walls"])
         img_width = cell_size * self.columns
@@ -161,6 +170,8 @@ class Grid(object):
 
     def _configure_cells(self):
         for cell in self.each_cell():
+            if not cell:
+                continue
             row, col = cell.row, cell.column
             cell.north = self[row - 1, col]
             cell.south = self[row + 1, col]
@@ -251,6 +262,66 @@ class Distances(object):
         return path
 
 
+class Mask(object):
+    __slots__ = ["rows", "columns", "bits"]
+
+    def __init__(self, rows, columns):
+        self.rows, self.columns = rows, columns
+        self.bits = [[True for _ in range(self.columns)] for _ in range(self.rows)]
+
+    def __getitem__(self, key):
+        row, col = key
+        if row < 0 or row >= self.rows:
+            return False
+        if col < 0 or col >= self.columns:
+            return False
+        return self.bits[row][col]
+
+    def __setitem__(self, key, value):
+        row, col = key
+        self.bits[row][col] = value
+
+    def __len__(self):
+        count = 0
+        for row in range(self.rows):
+            for col in range(self.columns):
+                if self.bits[row][col]:
+                    count += 1
+        return count
+
+    def random_location(self):
+        while True:
+            row = random.randint(0, self.rows - 1)
+            col = random.randint(0, self.columns - 1)
+            if self[row, col]:
+                return row, col
+
+
+class MaskedGrid(Grid):
+    def __init__(self, mask):
+        self.mask = mask
+        super().__init__(mask.rows, mask.columns)
+
+    def _prepare_grid(self):
+        def create_cell(row, col):
+            if self.mask[row, col]:
+                return Cell(row, col)
+            else:
+                return None
+
+        def create_row(row):
+            return [create_cell(row, col) for col in range(self.columns)]
+
+        return [create_row(row) for row in range(self.rows)]
+
+    def random_cell(self):
+        row, col = self.mask.random_location()
+        return self[row, col]
+
+    def size(self):
+        return len(self.mask)
+
+
 def longest_path(d):
     start, _ = d.max()
     d = start.distances()
@@ -303,10 +374,100 @@ def aldous_broder(grid):
     return grid
 
 
+def wilsons(grid):
+    unvisited = list(grid.each_cell())
+    first = sample(unvisited)
+    unvisited.remove(first)
+    while unvisited:
+        cell = sample(unvisited)
+        path = [cell]
+        while cell in unvisited:
+            cell = sample(cell.neighbors())
+            if cell in path:
+                pos = path.index(cell)
+                path = path[0 : pos + 1]
+            else:
+                path.append(cell)
+        for i in range(0, len(path) - 1):
+            path[i].link(path[i + 1])
+            unvisited.remove(path[i])
+    return grid
+
+
+def hunt_and_kill(grid):
+    current = grid.random_cell()
+    while current:
+        unvisited_neighbors = list(filter(lambda x: not x.links, current.neighbors()))
+        if unvisited_neighbors:
+            neighbor = sample(unvisited_neighbors)
+            current.link(neighbor)
+            current = neighbor
+        else:
+            current = None
+            for cell in grid.each_cell():
+                visited_neighbors = list(filter(lambda x: x.links, cell.neighbors()))
+                if not cell.links and visited_neighbors:
+                    current = cell
+                    neighbor = sample(visited_neighbors)
+                    current.link(neighbor)
+                    break
+    return grid
+
+
+def recursive_backtracker(grid, start_at=None):
+    start_at = start_at or grid.random_cell()
+    stack = []
+    stack.append(start_at)
+    while stack:
+        current = stack[-1]
+        neighbors = list(filter(lambda x: not x.links, current.neighbors()))
+        if not neighbors:
+            stack.pop()
+        else:
+            neighbor = sample(neighbors)
+            current.link(neighbor)
+            stack.append(neighbor)
+    return grid
+
+
+def test_algorithms():
+    algorithms = [
+        binary_tree,
+        sidewinder,
+        aldous_broder,
+        wilsons,
+        hunt_and_kill,
+        recursive_backtracker,
+    ]
+    tries = 100
+    size = 20
+    averages = dict()
+    for algorithm in algorithms:
+        print(f"running {algorithm.__name__}")
+        deadends_counts = []
+        for i in range(tries):
+            grid = Grid(size, size)
+            algorithm(grid)
+            deadends_counts.append(len(list(grid.deadends())))
+        total_deadends = sum(deadends_counts)
+        averages[algorithm] = total_deadends / len(deadends_counts)
+    total_cells = size * size
+    print()
+    print(f"average dead-dends per {size}x{size} maze ({total_cells} cells):")
+    print()
+    sorted_algorithms = sorted(averages.items(), key=lambda x: -x[1])
+    for algorithm, average in sorted_algorithms:
+        percentage = int(average * 100.0 / (size * size))
+        name = algorithm.__name__
+        print(f"{name: <21} : {int(average): >3}/{total_cells} ({percentage}%)")
+    print()
+
+
 if __name__ == "__main__":
-    grid = Grid(16, 16)
-    binary_tree(grid)
-    distances = grid[8, 8].distances()
-    grid = DistanceGrid(grid, distances)
-    img = grid.to_image(cell_size=10)
-    img.save("test.png")
+    mask = Mask(5,5)
+    mask[0,0] = False
+    mask[2,2] = False
+    mask[4,4] = False
+    grid = MaskedGrid(mask)
+    recursive_backtracker(grid)
+    print(grid)
